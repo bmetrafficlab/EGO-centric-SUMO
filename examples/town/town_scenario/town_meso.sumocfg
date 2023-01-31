@@ -1,0 +1,24 @@
+<configuration>
+
+  <input>
+     <net-file value="town.net.xml"/> 
+	 <route-files value="town.rou.xml"/>
+
+	<mesoscopic>
+		<mesosim value = "true"/>
+		<meso-junction-control.limited value = "true"/>
+		<meso-overtaking value = "true"/>
+	</mesoscopic>
+
+  </input>
+
+  <time>
+     <begin value="0"/>
+     <end value="3600"/>
+  </time>
+
+  <processing>
+     <time-to-teleport value="180"/>
+  </processing>	
+
+</configuration>

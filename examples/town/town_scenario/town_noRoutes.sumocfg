@@ -1,0 +1,16 @@
+<configuration>
+
+  <input>
+     <net-file value="town.net.xml"/> 
+  </input>
+
+  <time>
+     <begin value="0"/>
+     <end value="3600"/>
+  </time>
+
+  <processing>
+     <time-to-teleport value="180"/>
+  </processing>	
+
+</configuration>
