@@ -27,10 +27,12 @@ def main():
     log_ego_speed = []
     log_num_lane_changes = 0
     log_headway = []
+    log_step_time = []
 
     t1 = time.time()
     for i in range(3600):
 
+        t1_step = time.time()
         # Step simulator
         traci.simulationStep()
 
@@ -69,6 +71,7 @@ def main():
                         st_exception = False
                 except traci.TraCIException:
                     break
+        t2_step = time.time()
 
         # logging
         log_veh_count.append(len(vehs))
@@ -76,6 +79,7 @@ def main():
         if traci.vehicle.couldChangeLane('ego', 1) or traci.vehicle.couldChangeLane('ego', -1):
             log_num_lane_changes += 1
         log_headway.append(traci.vehicle.getLeader('ego', 150))
+        log_step_time.append(t2_step - t1_step)
 
     t2 = time.time()
     print(f"Simulation time: {t2 - t1} seconds")
@@ -83,7 +87,7 @@ def main():
     log_time = t2 - t1
 
     with open(script_dir + '/results/town_micro_results', 'wb') as f:
-        pickle.dump([log_time, log_veh_count, log_ego_speed, log_num_lane_changes, log_headway], f)
+        pickle.dump([log_time, log_veh_count, log_ego_speed, log_num_lane_changes, log_headway, log_step_time], f)
 
     traci.close()
 

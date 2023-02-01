@@ -93,10 +93,12 @@ def main():
     log_ego_speed = []
     log_num_lane_changes = 0
     log_headway = []
+    log_step_time = []
 
     t1 = time.time()
     for i in range(3600):
 
+        t1_step = time.time()
         # Step both simulators
         if i == 0:
             parallel_conn.set_callback_arguments((ego_id, init, edges), micro)
@@ -106,12 +108,14 @@ def main():
         parallel_conn.simulation_step(network)
 
         veh_count, ego_speed, changed_lane, headway = parallel_conn.get_callback_returns(micro)
+        t2_step = time.time()
 
         # logging
         log_veh_count.append(veh_count)
         log_ego_speed.append(ego_speed)
         log_num_lane_changes += changed_lane
         log_headway.append(headway)
+        log_step_time.append(t2_step - t1_step)
 
     t2 = time.time()
     print(f"Simulation time: {t2 - t1} seconds")
@@ -119,7 +123,7 @@ def main():
     log_time = t2-t1
 
     with open(script_dir + "/results/town_cosim_results", 'wb') as f:
-        pickle.dump([log_time, log_veh_count, log_ego_speed, log_num_lane_changes, log_headway], f)
+        pickle.dump([log_time, log_veh_count, log_ego_speed, log_num_lane_changes, log_headway, log_step_time], f)
 
     parallel_conn.close()
 
