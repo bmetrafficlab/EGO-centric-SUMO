@@ -27,6 +27,8 @@ class LibsumoParallelConnection:
         else:
             sys.exit("Please declare environment variable 'SUMO_HOME'")
 
+        self.multi_ego = False
+
         self._events = dict()
         self._events['start_micro'] = mp.Event()
         self._events['start_micro_DONE'] = mp.Event()
@@ -58,6 +60,8 @@ class LibsumoParallelConnection:
 
         self._set_values['ego_id'] = ''
         self._set_values['ego_pos'] = (0.0, 0.0)
+        self._set_values['multi_ego_id'] = ()
+        self._set_values['multi_ego_pos'] = ()
         self._set_values['distance'] = 0.0
         self._set_values['subgraph'] = ()
         self._set_values['inflow'] = ()
@@ -111,12 +115,19 @@ class LibsumoParallelConnection:
             Args:
                 cmd_micro (list): SUMO command to start the microscopic simulation
                 cmd_meso (list): SUMO command to start the mesoscopic simulation
-                ego_id (string): name of the ego vehicle
+                ego_id (string or list): name(s) of the ego vehicle(s)
                 distance (float): road distance in which microsimulation is used wrt the EGO coordinates. Only edges
                                   within the range is simulated with car following dynamics
         """
 
-        self._set_values['ego_id'] = ego_id
+        if type(ego_id) is str:
+            self.multi_ego = False
+            self._set_values['ego_id'] = ego_id
+        elif type(ego_id) is list:
+            self.multi_ego = True
+            self._set_values['multi_ego_id'] = tuple(ego_id)
+        else:
+            raise TypeError("ego_id must be a string or a list of strings")
         self._set_values['distance'] = distance
 
         self._sumo_meso.start()
@@ -303,13 +314,21 @@ class LibsumoParallelConnection:
         """
 
         # Init
-        x, y = self._set_values['ego_pos']
         distance = self._set_values['distance']
-
         subgraph = []
-        edges = network.getNeighboringEdges(x, y, distance, includeJunctions=True)
-        for edge in edges:
-            subgraph.append(edge[0].getID())
+
+        if self.multi_ego:
+            for pos in self._set_values['multi_ego_pos']:
+                x, y = pos
+                edges = network.getNeighboringEdges(x, y, distance, includeJunctions=True)
+                for edge in edges:
+                    subgraph.append(edge[0].getID())
+            subgraph = list(set(subgraph))
+        else:
+            x, y = self._set_values['ego_pos']
+            edges = network.getNeighboringEdges(x, y, distance, includeJunctions=True)
+            for edge in edges:
+                subgraph.append(edge[0].getID())
 
         self._set_values['subgraph_prev'] = self._set_values['subgraph']
         self._set_values['subgraph'] = subgraph
@@ -437,8 +456,6 @@ class LibsumoParallelConnection:
 
                 inflows = list(self._set_values['inflow'])
                 subgraph = list(self._set_values['subgraph'])
-                ego_id = self._set_values['ego_id']
-                x, y = self._set_values['ego_pos']
                 distance = self._set_values['distance']
                 new_vehs = self._set_values['meso_vehs']
                 new_routes = self._set_values['meso_routes']
@@ -464,20 +481,49 @@ class LibsumoParallelConnection:
                         # pass
                 # Clear links
                 micro_veh_ids = libsumo.vehicle.getIDList()
+                if self.multi_ego:
+                    ego_ids = self._set_values['multi_ego_id']
+                    ego_pos_tuples = self._set_values['multi_ego_pos']
+                else:
+                    ego_id = self._set_values['ego_id']
+                    x, y = self._set_values['ego_pos']
+
                 for veh in micro_veh_ids:
-                    if veh == ego_id:
-                        continue
-                    else:
-                        edge_id = libsumo.vehicle.getRoadID(veh)
-                        if edge_id in subgraph:
+                    if self.multi_ego:
+                        if veh in ego_ids:
                             continue
                         else:
-                            try:
-                                x2, y2 = libsumo.vehicle.getPosition(veh)
-                                if math.sqrt((x2 - x) ** 2 + (y2 - y) ** 2) > distance * 1.5:
-                                    libsumo.vehicle.remove(veh, reason=2)
-                            except libsumo.TraCIException:
-                                pass  # vehicle was already removed from another link.
+                            edge_id = libsumo.vehicle.getRoadID(veh)
+                            if edge_id in subgraph:
+                                continue
+                            else:
+                                try:
+                                    x2, y2 = libsumo.vehicle.getPosition(veh)
+                                    out_of_range = []
+                                    for pos in ego_pos_tuples:
+                                        x, y = pos
+                                        if math.sqrt((x2 - x) ** 2 + (y2 - y) ** 2) > distance * 1.5:
+                                            out_of_range.append(True)
+                                        else:
+                                            out_of_range.append(False)
+                                    if all(out_of_range):
+                                        libsumo.vehicle.remove(veh, reason=2)
+                                except libsumo.TraCIException:
+                                    pass  # vehicle was already removed from another link.
+                    else:
+                        if veh == ego_id:
+                            continue
+                        else:
+                            edge_id = libsumo.vehicle.getRoadID(veh)
+                            if edge_id in subgraph:
+                                continue
+                            else:
+                                try:
+                                    x2, y2 = libsumo.vehicle.getPosition(veh)
+                                    if math.sqrt((x2 - x) ** 2 + (y2 - y) ** 2) > distance * 1.5:
+                                        libsumo.vehicle.remove(veh, reason=2)
+                                except libsumo.TraCIException:
+                                    pass  # vehicle was already removed from another link.
 
                 # Callback function
                 if callback is not None:
@@ -495,10 +541,20 @@ class LibsumoParallelConnection:
                     tmp_inflow_ids[edge] = libsumo.edge.getLastStepVehicleIDs(edge)
                 self._set_values['prev_inflow_ids'] = tmp_inflow_ids
 
-                try:
-                    self._set_values['ego_pos'] = libsumo.vehicle.getPosition(self._set_values['ego_id'])
-                except libsumo.TraCIException:
-                    sys.stdout.write("EGO is not in the simulation\n")
+                if self.multi_ego:
+                    tmp_ego_pos_list = []
+                    for ego_id in ego_ids:
+                        try:
+                            tmp_ego_pos_list.append(libsumo.vehicle.getPosition(ego_id))
+                        except libsumo.TraCIException:
+                            tmp_ego_pos_list.append((0, 0))
+                            sys.stdout.write("EGO is not in the simulation\n")
+                    self._set_values['multi_ego_pos'] = tmp_ego_pos_list
+                else:
+                    try:
+                        self._set_values['ego_pos'] = libsumo.vehicle.getPosition(self._set_values['ego_id'])
+                    except libsumo.TraCIException:
+                        sys.stdout.write("EGO is not in the simulation\n")
 
                 self._events['step_micro'].clear()
                 self._events['step_micro_DONE'].set()
