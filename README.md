@@ -1,6 +1,6 @@
-# EGO-centric-SUMO
+# EGO centric SUMO
 
-This project aims at speeding up SUMO traffic simulation around one or multiple EGO vehicles. Around the EGO vehile(s) full-scale microsimulation is used, the rest of the network is simulated with the mesoscopic model of SUMO. 
+This project aims at speeding up SUMO traffic simulation around one or multiple EGO vehicles in large traffic scenarios. Around the EGO vehile(s) full-scale microsimulation is used, the rest of the network is simulated with the mesoscopic model of SUMO. 
 
 # Related publication
 
